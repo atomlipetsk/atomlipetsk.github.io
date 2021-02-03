@@ -1,4 +1,4 @@
-const DEBUG = false;
+const DEBUG = true;
 
 self.addEventListener("activate", async function (event) {
   console.log("SW activated");
@@ -14,14 +14,26 @@ self.addEventListener("fetch", function (event) {
 });
 
 function uuidv4() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+    var r = (Math.random() * 16) | 0,
+      v = c == "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
 }
 
 function fetchInterceptor(event) {
   const clientId = event.resultingClientId || event.clientId;
+
+  if (DEBUG) {
+    console.log(
+      "[fetch:sw:0] url",
+      event.request.url,
+      "resultingClientId",
+      event.resultingClientId,
+      "clientId",
+      event.clientId
+    );
+  }
 
   return Promise.race([
     event.request.destination === "iframe"
@@ -114,6 +126,7 @@ function sendMessageToParent(message, waitResponse = true) {
         };
 
         self.addEventListener("message", handleMessage);
-      });
-    });
+      }).catch((error) => console.error(error));
+    })
+    .catch((error) => console.error(error));
 }
