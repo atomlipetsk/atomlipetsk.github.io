@@ -67,30 +67,29 @@ SmartAppInterceptor.prototype._sendMessageToAndroid = function ({
 
   this.log({ data: { url, method, body, headers }, ref });
 
-  if (typeof express === "undefined") {
-    this.log('No object "express", cannot send message to Android');
+  if (!window.top) {
+    this.log("Not in iframe, cannot send message to parent");
     return;
   }
-  if (!express.send) {
-    this.log('No method "express.send", cannot send message to Android');
-  }
 
-  express.send(
-    JSON.stringify({
-      data: {
+  window.top.postMessage(
+    {
+      payload: {
         url: proxiedUrl,
         method,
         body: body && base64.encode(body),
         headers: requestHeaders,
       },
-      ref,
-    })
+      id: ref,
+      type: "fioriRestCall",
+    },
+    "*"
   );
 };
 
 SmartAppInterceptor.prototype._handleAndroidEvent = function (responseText) {
   const response = JSON.parse(responseText);
-  const { status, body, headers } = response.data
+  const { status, body, headers } = response.data;
 
   this.log(response, response.body && base64.decode(body));
 
@@ -168,7 +167,7 @@ SmartAppInterceptor.prototype._processRedirect = function (data) {
       ...headers,
       location: headers.location.replace(
         "https://mobile-dev.nornik.ru:8443",
-        "https://express2018.herokuapp.com"
+        "https://atomlipetsk.github.io"
       ),
     },
   };
@@ -177,7 +176,7 @@ SmartAppInterceptor.prototype._processRedirect = function (data) {
 SmartAppInterceptor.prototype._prepareFetchUrl = function (url) {
   return url
     .replace(
-      "https://express2018.herokuapp.com",
+      "https://atomlipetsk.github.io",
       "https://mobile-dev.nornik.ru:8443"
     )
     .replace(/^\//, "https://mobile-dev.nornik.ru:8443/");

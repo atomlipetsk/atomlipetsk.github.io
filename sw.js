@@ -104,9 +104,9 @@ function sendMessageToParent(message, waitResponse = true) {
       type: "all",
     })
     .then((clients) => {
-      const client = (clients || []).find((c) => c.frameType !== "nested");
+      const client = clients && clients.length && clients[0];
 
-      if (!client) return Promise.reject();
+      if (!client) return Promise.reject("Client not found for postMessage");
 
       if (DEBUG) console.log("[send::sw]", message, client);
 
@@ -126,7 +126,6 @@ function sendMessageToParent(message, waitResponse = true) {
         };
 
         self.addEventListener("message", handleMessage);
-      }).catch((error) => console.error(error));
-    })
-    .catch((error) => console.error(error));
+      });
+    });
 }
