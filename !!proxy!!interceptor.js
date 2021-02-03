@@ -113,7 +113,7 @@ SmartAppInterceptor.prototype._installSW = function () {
   }
 
   navigator.serviceWorker
-    .register("sw.js")
+    .register("!!proxy!!sw.js")
     .then(function (registration) {
       navigator.serviceWorker.addEventListener(
         "message",

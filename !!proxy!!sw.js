@@ -2,7 +2,6 @@ const DEBUG = true;
 
 self.addEventListener("activate", async function (event) {
   console.log("SW activated");
-  sendMessageToParent({ type: "reload" }, false);
 });
 
 self.addEventListener("install", async function (event) {
@@ -22,52 +21,25 @@ function uuidv4() {
 }
 
 function fetchInterceptor(event) {
-  const clientId = event.resultingClientId || event.clientId;
-
   if (DEBUG) {
     console.log(
       "[fetch:sw:0] url",
       event.request.url,
-      "resultingClientId",
-      event.resultingClientId,
-      "clientId",
-      event.clientId
+      "event.resultingClientId",
+      event.resultingClientId
     );
   }
 
-  return Promise.race([
-    event.request.destination === "iframe"
-      ? Promise.resolve(false)
-      : self.clients.get(clientId).then((client) => {
-          const isIframeEvent =
-            (client && client.frameType === "nested") ||
-            event.request.destination === "iframe";
+  const needToLoadImmediately = /https?:\/\/[^/]+\/\!\!proxy\!\!/.test(
+    event.request.url
+  );
 
-          return (
-            !isIframeEvent ||
-            /\/__smart_app__/.test(event.request.url) ||
-            !event.request.url.startsWith("http://localhost:8080")
-          );
-        }),
-    new Promise((resolve) => setTimeout(() => resolve(1), 100)),
-  ]).then((needToLoadImmediately) => {
-    if (DEBUG) {
-      console.log(
-        "[fetch:sw]",
-        event.request.url,
-        clientId,
-        needToLoadImmediately,
-        needToLoadImmediately ? "WEB" : "IFRAME"
-      );
-    }
+  if (needToLoadImmediately) return fetch(event.request);
 
-    if (needToLoadImmediately) return fetch(event.request);
-
-    return loadDataThroughParent(event.request);
-  });
+  return loadDataThroughParent(event.request, event.resultingClientId);
 }
 
-function loadDataThroughParent(request) {
+function loadDataThroughParent(request, id) {
   const headers = Array.from(request.headers.entries()).reduce(
     (headers, [key, value]) => ({ ...headers, [key]: value }),
     {}
@@ -76,13 +48,17 @@ function loadDataThroughParent(request) {
   return request
     .arrayBuffer()
     .then((body) =>
-      sendMessageToParent({
-        type: "request",
-        url: request.url,
-        method: request.method,
-        headers,
-        body: request.method === "GET" ? null : body,
-      })
+      sendMessageToParent(
+        {
+          type: "request",
+          url: request.url,
+          method: request.method,
+          headers,
+          body: request.method === "GET" ? null : body,
+        },
+        true,
+        id
+      )
     )
     .then((response) => {
       const responseInit = {
@@ -95,7 +71,7 @@ function loadDataThroughParent(request) {
     });
 }
 
-function sendMessageToParent(message, waitResponse = true) {
+function sendMessageToParent(message, waitResponse, id) {
   const messageId = uuidv4();
 
   return self.clients
@@ -104,13 +80,19 @@ function sendMessageToParent(message, waitResponse = true) {
       type: "all",
     })
     .then((clients) => {
-      const client = clients && clients.length && clients[0];
+      if (!clients.length)
+        return Promise.reject("Client not found for postMessage");
 
-      if (!client) return Promise.reject("Client not found for postMessage");
+      clients.map((client) => {
+        if (client.id === id) {
+          if (DEBUG) console.log("[send::sw] skip client", client);
+          return
+        }
 
-      if (DEBUG) console.log("[send::sw]", message, client);
+        if (DEBUG) console.log("[send::sw]", message, client);
 
-      client.postMessage({ ...message, messageId });
+        client.postMessage({ ...message, messageId });
+      });
     })
     .then(() => {
       if (!waitResponse) return null;
