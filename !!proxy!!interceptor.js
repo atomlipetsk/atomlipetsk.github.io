@@ -4,8 +4,6 @@ function SmartAppInterceptor({ iframeSelector, smartAppUrl }) {
   this._serviceWorker = null;
   this._cookies = {};
 
-  window.handleAndroidEvent = this._handleAndroidEvent.bind(this);
-
   this._installSW();
 }
 
@@ -23,19 +21,23 @@ SmartAppInterceptor.prototype._handleMessage = function (event) {
   const message = event.data;
   const messageId = message.messageId;
 
-  // this.log("[recv::web]", message);
+  const { url, method, headers, body, status } = message;
 
   switch (message.type) {
     case "request":
-      const { url, method, headers, body } = message;
+      this.log("iframe => smartapp", message);
 
-      this._sendMessageToAndroid({
+      this._sendMessageToWebClient({
         url,
         method,
         headers,
         body,
         ref: messageId,
       });
+      break;
+    case "response":
+      this.log("express => smartapp", message);
+      this._handleWebClientEvent({ ref, headers, body, status });
       break;
     default:
       // console.log("unknown event from iframe", message);
@@ -49,7 +51,7 @@ SmartAppInterceptor.prototype._sendMessageToSW = function (message) {
   this._serviceWorker.active.postMessage(message);
 };
 
-SmartAppInterceptor.prototype._sendMessageToAndroid = function ({
+SmartAppInterceptor.prototype._sendMessageToWebClient = function ({
   url,
   method,
   body,
@@ -65,7 +67,7 @@ SmartAppInterceptor.prototype._sendMessageToAndroid = function ({
       .join("; "),
   };
 
-  this.log({ data: { url, method, body, headers }, ref });
+  this.log('smartapp => express', { data: { url, method, body, headers }, ref });
 
   if (!window.top) {
     this.log("Not in iframe, cannot send message to parent");
@@ -87,17 +89,14 @@ SmartAppInterceptor.prototype._sendMessageToAndroid = function ({
   );
 };
 
-SmartAppInterceptor.prototype._handleAndroidEvent = function (responseText) {
-  const response = JSON.parse(responseText);
-  const { status, body, headers } = response.data;
-
-  this.log(response, response.body && base64.decode(body));
+SmartAppInterceptor.prototype._handleWebClientEvent = function ({ ref, headers, body, status }) {
+  this.log("smartapp => iframe", response.body && base64.decode(body));
 
   this._sendMessageToSW({
     status,
     headers,
     body: body && base64.decode(body),
-    messageId: response.ref,
+    messageId: ref,
   });
 };
 
